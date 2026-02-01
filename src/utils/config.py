@@ -18,6 +18,6 @@ STABILITY_SELECTION = {
 
 HWE_SETTINGS = {
     "missing_values": (-1, 9, 99),
-    "p_threshold": 1e-6,
+    "p_threshold": 1e-4,
     "method": "exact",
 }
