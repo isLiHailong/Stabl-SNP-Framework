@@ -8,7 +8,7 @@ from utils.validate import requirefile
 
 
 HWEMODULENAME = "hardyweinberginternal"
-HWEPATH = Path(__file__).resolve().parents[1] / "SNP excluded" / "Hardy–Weinberg.py"
+HWEPATH = Path(__file__).resolve().parents[1] / "Excluded" / "Hardy–Weinberg.py"
 
 spec = importlib.util.spec_from_file_location(HWEMODULENAME, HWEPATH)
 if spec is None or spec.loader is None:
