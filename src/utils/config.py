@@ -14,3 +14,10 @@ STABILITY_SELECTION = {
     "theta_right": 0.95,
     "theta_size": 86,
 }
+
+
+HWE_SETTINGS = {
+    "missing_values": (-1, 9, 99),
+    "p_threshold": 1e-6,
+    "method": "exact",
+}

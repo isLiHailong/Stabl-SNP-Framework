@@ -1,5 +1,7 @@
 import math
-from typing import Dict, Tuple, Optional, Union, List
+from typing import Dict, Tuple, Optional, Union, List, Iterable
+
+from utils.config import HWE_SETTINGS
 
 def _chi2_pvalue_1df(chi2: float) -> float:
     if chi2 < 0:
@@ -98,10 +100,18 @@ def hwe_exact_test(obs_hom_ref: int, obs_het: int, obs_hom_alt: int) -> float:
     p_value = min(max(p_value, 0.0), 1.0)
     return p_value
 
+def _normalize_missing_values(
+    missing_values: Optional[Iterable[Union[int, float]]],
+) -> Tuple[Union[int, float], ...]:
+    if missing_values is None:
+        return tuple(HWE_SETTINGS["missing_values"])
+    return tuple(missing_values)
+
 def hwe_from_genotype_vector(
     g: Union[List[Optional[int]], List[Optional[float]]],
-    missing_values: Tuple[Union[int, float], ...] = (-1, 9, 99, float("nan")),
+    missing_values: Optional[Iterable[Union[int, float]]] = None,
 ) -> Dict[str, object]:
+    missing_values = _normalize_missing_values(missing_values)
     obs_hom_ref = obs_het = obs_hom_alt = 0
     n_missing = 0
 
@@ -160,10 +170,4 @@ def hwe_from_counts(obs_hom_ref: int, obs_het: int, obs_hom_alt: int) -> Dict[st
         "p_exact": p_exact,
     }
 
-if __name__ == "__main__":
-    res1 = hwe_from_counts(50, 30, 20)
-    print("From counts:", res1)
 
-    g = [0, 1, 0, 2, 1, 1, 0, 2, None, 9, 0, 1, 2]
-    res2 = hwe_from_genotype_vector(g)
-    print("From vector:", res2)
