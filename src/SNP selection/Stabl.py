@@ -2,6 +2,7 @@ import numpy as np
 from utils.config import DEFAULT_SEED, NUMERIC_STABILITY, STABILITY_SELECTION
 from utils.numeric2 import discretizeback, chi2test
 from utils.numeric3 import build_snplist, build_labels, build_Xgenoint, build_Xgeno_z
+from utils.IO import readcsv, tofloat, isnan
 
 B = 200
 SUBSAMPLE_FRAC = 0.7
@@ -106,13 +107,21 @@ def chi2pvalsgenotypevsgroup(Xint, y):
 
 
 def load_inputs(
-    snp_list_file,
     genotype_file,
     group_file,
     sample_prefix="Y1_",
+    snp_list_file=None,
+    snp_list=None,
 ):
-    snp_list = build_snplist(snp_list_file)
-    X_int, X_imp, sample_cols = build_Xgenoint(genotype_file, snp_list, sample_prefix=sample_prefix)
+    if snp_list is None:
+        if snp_list_file is None:
+            raise ValueError("Either snp_list or snp_list_file must be provided.")
+        snp_list = build_snplist(snp_list_file)
+    X_int, X_imp, sample_cols = build_Xgenoint(
+        genotype_file,
+        snp_list,
+        sample_prefix=sample_prefix,
+    )
     labels = build_labels(group_file, sample_cols)
 
     use = labels >= 0
@@ -124,8 +133,28 @@ def load_inputs(
     return snp_list, y, X_int, Xz
 
 
+def build_snplist_from_stats(statscsv, pthreshold, snp_column="SNPName"):
+    df = readcsv(statscsv)
+    if "praw" not in df.columns:
+        raise ValueError("Input stats file must contain a 'praw' column.")
+    if snp_column not in df.columns:
+        raise ValueError(f"Input stats file must contain '{snp_column}' column.")
+
+    df["praw"] = tofloat(df["praw"])
+    df = df[~isnan(df["praw"])]
+
+    passed = df[df["praw"] < pthreshold]
+    snplist = passed[snp_column].dropna().astype(str).tolist()
+    if not snplist:
+        raise ValueError("No SNPs passed the p-value threshold.")
+    return snplist
+
+
 def run_stability_selection(
     snp_list_file=None,
+    stats_file=None,
+    pthreshold=None,
+    snp_column="SNPName",
     genotype_file=None,
     group_file=None,
     sample_prefix="Y1_",
@@ -139,15 +168,26 @@ def run_stability_selection(
 ):
     if (x_int is None) or (x_z is None) or (y is None) or (snp_list is None):
         if (snp_list_file is None) or (genotype_file is None) or (group_file is None):
-            raise ValueError(
-                "Provide either (x_int, x_z, y, snp_list) or provide "
-                "(snp_list_file, genotype_file, group_file) to load inputs."
+            if stats_file is None or pthreshold is None:
+                raise ValueError(
+                    "Provide either (x_int, x_z, y, snp_list) or provide "
+                    "(snp_list_file, genotype_file, group_file) to load inputs. "
+                    "Alternatively, pass stats_file with pthreshold to derive snp_list."
+                )
+        if snp_list is None and snp_list_file is None:
+            snp_list = build_snplist_from_stats(
+                statscsv=stats_file,
+                pthreshold=pthreshold,
+                snp_column=snp_column,
             )
+        elif snp_list is None:
+            snp_list = build_snplist(snp_list_file)
         snp_list, y, x_int, x_z = load_inputs(
-            snp_list_file=snp_list_file,
             genotype_file=genotype_file,
             group_file=group_file,
             sample_prefix=sample_prefix,
+            snp_list_file=snp_list_file,
+            snp_list=snp_list,
         )
 
     if x_int.shape[0] != x_z.shape[0]:
