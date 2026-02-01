@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils.config import DEFAULT_SEED, STABILITY_SELECTION
+from utils.config import DEFAULTSEED, STABILITYSELECTION
 from utils.numeric2 import chi2test
 
 
@@ -14,6 +14,7 @@ def chi2pvalsgenotypevsgroup(Xint, y):
     for j in range(p):
         x = Xint[:, j]
         tab3 = np.zeros((3, 2), dtype=int)
+
         for g in (0, 1, 2):
             m = (x == g)
             tab3[g, 0] = int(np.sum(m & (y == 0)))
@@ -31,7 +32,7 @@ def chi2pvalsgenotypevsgroup(Xint, y):
             continue
 
         try:
-            _, pval = chi2test(tab)
+            stat, pval = chi2test(tab)
             pvals[j] = float(pval)
         except Exception:
             pvals[j] = 1.0
@@ -39,42 +40,42 @@ def chi2pvalsgenotypevsgroup(Xint, y):
     return pvals
 
 
-def run_subsampling(
-    X_int,
+def runsubsampling(
+    Xint,
     y,
-    B_runs,
-    subsample_frac,
+    Bruns,
+    subsamplefrac,
     pgrid=None,
-    seed=DEFAULT_SEED,
+    seed=DEFAULTSEED,
 ):
     rng = np.random.default_rng(int(seed))
-    n, p = X_int.shape
+    n, p = Xint.shape
 
     if pgrid is None:
         pgrid = np.logspace(
-            float(STABILITY_SELECTION["pgrid_left"]),
-            float(STABILITY_SELECTION["pgrid_right"]),
-            int(STABILITY_SELECTION["pgrid_size"]),
+            float(STABILITYSELECTION["pgridleft"]),
+            float(STABILITYSELECTION["pgridright"]),
+            int(STABILITYSELECTION["pgridsize"]),
         )
     pgrid = np.asarray(pgrid, dtype=float)
 
-    freq_by_cutoff = np.zeros((pgrid.size, p), dtype=float)
+    freqbycutoff = np.zeros((pgrid.size, p), dtype=float)
 
-    for _ in range(int(B_runs)):
-        idx = rng.choice(n, size=int(n * subsample_frac), replace=False)
+    for b in range(int(Bruns)):
+        idx = rng.choice(n, size=int(n * subsamplefrac), replace=False)
         yb = y[idx]
-        Xb = X_int[idx, :]
+        Xb = Xint[idx, :]
 
         pvals = chi2pvalsgenotypevsgroup(Xb, yb)
 
         for i, cutoff in enumerate(pgrid):
-            freq_by_cutoff[i] += (pvals <= cutoff)
+            freqbycutoff[i] += (pvals <= cutoff)
 
-    freq_by_cutoff /= float(B_runs)
-    freq_max = np.max(freq_by_cutoff, axis=0)
+    freqbycutoff /= float(Bruns)
+    freqmax = np.max(freqbycutoff, axis=0)
 
     return {
         "pgrid": pgrid,
-        "freq_by_cutoff": freq_by_cutoff,
-        "freq_max": freq_max,
+        "freqbycutoff": freqbycutoff,
+        "freqmax": freqmax,
     }

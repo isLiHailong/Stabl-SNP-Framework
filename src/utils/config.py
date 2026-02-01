@@ -1,23 +1,22 @@
-DEFAULT_SEED = 42
+DEFAULTSEED = 42
 
-NUMERIC_STABILITY = {
+NUMERICSTABILITY = {
     "ridge": 1e-3,
     "eps": 1e-10,
     "jitter": 1e-6,
 }
 
-STABILITY_SELECTION = {
-    "pgrid_left": 1e-8,
-    "pgrid_right": 1e-4,
-    "pgrid_size": 401,
-    "theta_left": 0.1,
-    "theta_right": 0.95,
-    "theta_size": 86,
+STABILITYSELECTION = {
+    "pgridleft": 1e-8,
+    "pgridright": 1e-4,
+    "pgridsize": 401,
+    "thetaleft": 0.1,
+    "thetaright": 0.95,
+    "thetasize": 86,
 }
 
-
-HWE_SETTINGS = {
-    "missing_values": (-1, 9, 99),
-    "p_threshold": 1e-4,
+HWESETTINGS = {
+    "missingvalues": (-1, 9, 99),
+    "pthreshold": 1e-4,
     "method": "exact",
 }

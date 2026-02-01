@@ -1,12 +1,12 @@
 import numpy as np
 
 try:
-    from scipy.stats import chi2 as _chi2_dist
+    from scipy.stats import chi2 as chi2dist
 except Exception:
-    _chi2_dist = None
+    chi2dist = None
 
 
-def _kmeans1d_3(x, seed=42, max_iter=50, tol=1e-8):
+def kmeans1d3(x, seed=42, maxiter=50, tol=1e-8):
     x = np.asarray(x, dtype=float).ravel()
     n = x.size
     if n == 0:
@@ -23,30 +23,30 @@ def _kmeans1d_3(x, seed=42, max_iter=50, tol=1e-8):
         cents = np.linspace(lo, hi, 3)
     cents = cents.astype(float)
 
-    prev_obj = np.inf
+    prevobj = np.inf
     labels = np.zeros(n, dtype=int)
 
-    for _ in range(max_iter):
+    for it in range(int(maxiter)):
         d = np.abs(x[:, None] - cents[None, :])
         labels = np.argmin(d, axis=1)
 
-        new_cents = cents.copy()
+        newcents = cents.copy()
         for k in range(3):
             m = labels == k
             if np.any(m):
-                new_cents[k] = np.mean(x[m])
+                newcents[k] = np.mean(x[m])
             else:
-                new_cents[k] = x[rng.integers(0, n)]
+                newcents[k] = x[rng.integers(0, n)]
 
-        d2 = (x - new_cents[labels]) ** 2
+        d2 = (x - newcents[labels]) ** 2
         obj = float(np.sum(d2))
 
-        if abs(prev_obj - obj) <= tol * (1.0 + prev_obj):
-            cents = new_cents
+        if abs(prevobj - obj) <= tol * (1.0 + prevobj):
+            cents = newcents
             break
 
-        prev_obj = obj
-        cents = new_cents
+        prevobj = obj
+        cents = newcents
 
     return labels, cents
 
@@ -63,7 +63,7 @@ def discretizeback(X, method="kmeans", seed=42):
 
     for j in range(p):
         col = X[:, j].astype(float, copy=False)
-        labels, cents = _kmeans1d_3(col, seed=seed)
+        labels, cents = kmeans1d3(col, seed=seed)
         order = np.argsort(cents)
         remap = np.empty(3, dtype=int)
         remap[order[0]] = 0
@@ -74,7 +74,7 @@ def discretizeback(X, method="kmeans", seed=42):
     return out
 
 
-def chi2test(tab, yates_correction=False):
+def chi2test(tab, yatescorrection=False):
     tab = np.asarray(tab)
     if tab.ndim != 2:
         raise ValueError("tab must be a 2D contingency table.")
@@ -98,7 +98,7 @@ def chi2test(tab, yates_correction=False):
         return 0.0, 1.0
 
     obs = tab.astype(float)
-    if yates_correction and tab.shape == (2, 2):
+    if yatescorrection and tab.shape == (2, 2):
         stat = np.sum(((np.abs(obs - expected) - 0.5) ** 2)[mask] / expected[mask])
     else:
         stat = np.sum(((obs - expected) ** 2)[mask] / expected[mask])
@@ -107,11 +107,8 @@ def chi2test(tab, yates_correction=False):
     if dof <= 0:
         return float(stat), 1.0
 
-    if _chi2_dist is None:
+    if chi2dist is None:
         raise RuntimeError("scipy is required for chi-square p-value (scipy.stats.chi2).")
 
-    pval = float(_chi2_dist.sf(stat, dof))
+    pval = float(chi2dist.sf(stat, dof))
     return float(stat), pval
-
-
-

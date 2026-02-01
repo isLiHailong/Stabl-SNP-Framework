@@ -1,59 +1,66 @@
 import numpy as np
 
-from utils.config import STABILITY_SELECTION
+from utils.config import STABILITYSELECTION
 
 
-def fdp_plus(sreal, skn):
+def fdpplus(sreal, skn):
     return (1.0 + float(skn)) / max(1.0, float(sreal))
 
 
-def choose_theta_from_fdp(freqreal, freqko, theta_grid=None):
-    if theta_grid is None:
-        theta_grid = np.linspace(
-            float(STABILITY_SELECTION["theta_left"]),
-            float(STABILITY_SELECTION["theta_right"]),
-            int(STABILITY_SELECTION["theta_size"]),
+def choosethetafromfdp(freqreal, freqko, thetagrid=None):
+    if thetagrid is None:
+        thetagrid = np.linspace(
+            float(STABILITYSELECTION["thetaleft"]),
+            float(STABILITYSELECTION["thetaright"]),
+            int(STABILITYSELECTION["thetasize"]),
         )
 
-    best_fdp = None
-    best_theta = None
-    for t in theta_grid:
+    bestfdp = None
+    besttheta = None
+
+    for t in thetagrid:
         sreal = int(np.sum(freqreal >= t))
         if sreal == 0:
             continue
+
         skn = int(np.sum(freqko >= t))
-        fdp = fdp_plus(sreal, skn)
-        if (best_fdp is None) or (fdp < best_fdp):
-            best_fdp = float(fdp)
-            best_theta = float(t)
+        fdp = fdpplus(sreal, skn)
 
-    return best_theta
+        if (bestfdp is None) or (fdp < bestfdp):
+            bestfdp = float(fdp)
+            besttheta = float(t)
 
-
-def summarize_stability(freq_by_cutoff):
-    if freq_by_cutoff.ndim != 2:
-        raise ValueError("freq_by_cutoff must be a 2D array [cutoff x SNP].")
-    return np.max(freq_by_cutoff, axis=0)
+    return besttheta
 
 
-def run_determination(
-    freq_by_cutoff_real,
-    freq_by_cutoff_ko,
-    snp_list=None,
-    theta_grid=None,
+def summarizestability(freqbycutoff):
+    if freqbycutoff.ndim != 2:
+        raise ValueError("freqbycutoff must be a 2D array [cutoff x SNP].")
+    return np.max(freqbycutoff, axis=0)
+
+
+def rundetermination(
+    freqbycutoffreal,
+    freqbycutoffko,
+    snplist=None,
+    thetagrid=None,
 ):
-    if freq_by_cutoff_real.shape != freq_by_cutoff_ko.shape:
+    if freqbycutoffreal.shape != freqbycutoffko.shape:
         raise ValueError("Real/knockoff frequency grids must have the same shape.")
 
-    freqreal = summarize_stability(freq_by_cutoff_real)
-    freqko = summarize_stability(freq_by_cutoff_ko)
+    freqreal = summarizestability(freqbycutoffreal)
+    freqko = summarizestability(freqbycutoffko)
 
-    theta = choose_theta_from_fdp(freqreal, freqko, theta_grid=theta_grid)
-    selmask = (freqreal >= theta) if theta is not None else np.zeros_like(freqreal, dtype=bool)
+    theta = choosethetafromfdp(freqreal, freqko, thetagrid=thetagrid)
+    selmask = (
+        (freqreal >= theta)
+        if theta is not None
+        else np.zeros_like(freqreal, dtype=bool)
+    )
 
     selected = None
-    if snp_list is not None:
-        selected = [snp_list[i] for i in np.where(selmask)[0]]
+    if snplist is not None:
+        selected = [snplist[i] for i in np.where(selmask)[0]]
 
     return {
         "theta": theta,

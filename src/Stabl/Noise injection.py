@@ -1,7 +1,7 @@
 import numpy as np
 
-from utils.config import DEFAULT_SEED, NUMERIC_STABILITY
-from utils.numeric3 import build_Xgeno_z, build_Xgenoint, build_labels, build_snplist
+from utils.config import DEFAULTSEED, NUMERICSTABILITY
+from utils.numeric3 import buildXgenoz, buildXgenoint, buildlabels, buildsnplist
 
 
 def sqrtpsd(A):
@@ -12,10 +12,10 @@ def sqrtpsd(A):
 
 
 def gaussianequicorrelatedknockoffs(X, ridge=None, eps=None, jitter=None, seed=None):
-    ridge = float(NUMERIC_STABILITY["ridge"] if ridge is None else ridge)
-    eps = float(NUMERIC_STABILITY["eps"] if eps is None else eps)
-    jitter = float(NUMERIC_STABILITY["jitter"] if jitter is None else jitter)
-    seed = int(DEFAULT_SEED if seed is None else seed)
+    ridge = float(NUMERICSTABILITY["ridge"] if ridge is None else ridge)
+    eps = float(NUMERICSTABILITY["eps"] if eps is None else eps)
+    jitter = float(NUMERICSTABILITY["jitter"] if jitter is None else jitter)
+    seed = int(DEFAULTSEED if seed is None else seed)
 
     rng = np.random.default_rng(seed)
     n, p = X.shape
@@ -44,25 +44,27 @@ def gaussianequicorrelatedknockoffs(X, ridge=None, eps=None, jitter=None, seed=N
     return X @ A + U @ C
 
 
-def load_candidate_genotypes(
-    genotype_file,
-    group_file,
-    snp_list_file,
-    sample_prefix="Y1_",
+def loadcandidategenotypes(
+    genotypefile,
+    groupfile,
+    snplistfile,
+    sampleprefix="Y1_",
 ):
-    snp_list = build_snplist(snp_list_file)
-    X_int, X_imp, sample_cols = build_Xgenoint(
-        genotype_file,
-        snp_list,
-        sample_prefix=sample_prefix,
+    snplist = buildsnplist(snplistfile)
+    Xint, Ximp, samplecols = buildXgenoint(
+        genotypefile,
+        snplist,
+        sampleprefix=sampleprefix,
     )
-    labels = build_labels(group_file, sample_cols)
+    labels = buildlabels(groupfile, samplecols)
     use = labels >= 0
     y = labels[use].astype(int)
-    X_int = X_int[use, :]
-    Xz, scaler = build_Xgeno_z(X_imp[use, :])
-    return snp_list, y, X_int, Xz, scaler
+
+    Xint = Xint[use, :]
+    Xz, scaler = buildXgenoz(Ximp[use, :])
+
+    return snplist, y, Xint, Xz, scaler
 
 
-def run_noise_injection(Xz, seed=DEFAULT_SEED):
+def runnoiseinjection(Xz, seed=DEFAULTSEED):
     return gaussianequicorrelatedknockoffs(Xz, seed=seed)

@@ -2,74 +2,83 @@ from pathlib import Path
 import importlib.util
 from typing import Iterable, Optional, Union, Dict, List
 
-from utils.config import HWE_SETTINGS
-from utils.numeric3 import build_snplist, build_Xgenoint
+from utils.config import HWESETTINGS
+from utils.numeric3 import buildsnplist, buildXgenoint
 from utils.validate import requirefile
 
 
-_HWE_MODULE_NAME = "hardy_weinberg_internal"
-_HWE_PATH = Path(__file__).resolve().parents[1] / "SNP excluded" / "Hardy–Weinberg.py"
-_spec = importlib.util.spec_from_file_location(_HWE_MODULE_NAME, _HWE_PATH)
-if _spec is None or _spec.loader is None:
-    raise ImportError(f"Unable to load Hardy–Weinberg module from {_HWE_PATH}.")
-_hwe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_hwe)
+HWEMODULENAME = "hardyweinberginternal"
+HWEPATH = Path(__file__).resolve().parents[1] / "SNP excluded" / "Hardy–Weinberg.py"
+
+spec = importlib.util.spec_from_file_location(HWEMODULENAME, HWEPATH)
+if spec is None or spec.loader is None:
+    raise ImportError(f"Unable to load Hardy–Weinberg module from {HWEPATH}.")
+
+hwe = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hwe)
 
 
-def hwe_screen_from_genotype(
-    genotype_csv: str,
-    snp_list_csv: str,
-    sample_prefix: str = "Y1_",
-    missing_values: Optional[Iterable[Union[int, float]]] = None,
-    p_threshold: Optional[float] = None,
+def hwescreenfromgenotype(
+    genotypecsv: str,
+    snplistcsv: str,
+    sampleprefix: str = "Y1_",
+    missingvalues: Optional[Iterable[Union[int, float]]] = None,
+    pthreshold: Optional[float] = None,
     method: Optional[str] = None,
 ) -> Dict[str, object]:
-    requirefile(genotype_csv)
-    requirefile(snp_list_csv)
+    requirefile(genotypecsv)
+    requirefile(snplistcsv)
 
-    missing_values = (
-        tuple(HWE_SETTINGS["missing_values"])
-        if missing_values is None
-        else tuple(missing_values)
+    missingvalues = (
+        tuple(HWESETTINGS["missingvalues"])
+        if missingvalues is None
+        else tuple(missingvalues)
     )
-    p_threshold = float(
-        HWE_SETTINGS["p_threshold"] if p_threshold is None else p_threshold
+
+    pthreshold = float(
+        HWESETTINGS["pthreshold"] if pthreshold is None else pthreshold
     )
-    method = str(HWE_SETTINGS["method"] if method is None else method).lower()
+
+    method = str(HWESETTINGS["method"] if method is None else method).lower()
     if method not in {"exact", "chi2"}:
         raise ValueError("method must be 'exact' or 'chi2'.")
 
-    snp_list = build_snplist(snp_list_csv)
-    X_int, _X_imp, _sample_cols = build_Xgenoint(
-        genotype_csv,
-        snp_list,
-        sample_prefix=sample_prefix,
+    snplist = buildsnplist(snplistcsv)
+    Xint, Ximp, samplecols = buildXgenoint(
+        genotypecsv,
+        snplist,
+        sampleprefix=sampleprefix,
     )
 
     kept: List[str] = []
     removed: List[str] = []
     stats: List[Dict[str, object]] = []
 
-    for snp, col in zip(snp_list, X_int.T):
-        res = _hwe.hwe_from_genotype_vector(col.tolist(), missing_values=missing_values)
-        p_value = res["p_exact"] if method == "exact" else res["p_chi2"]
+    for snp, col in zip(snplist, Xint.T):
+        res = hwe.hwefromgenotypevector(
+            col.tolist(),
+            missingvalues=missingvalues,
+        )
+
+        pvalue = res["pexact"] if method == "exact" else res["pchi2"]
+
         res = dict(res)
         res["snp"] = snp
-        res["p_value"] = p_value
+        res["pvalue"] = pvalue
         stats.append(res)
 
-        if p_value >= p_threshold:
+        if pvalue >= pthreshold:
             kept.append(snp)
         else:
             removed.append(snp)
 
     return {
-        "kept_snps": kept,
-        "removed_snps": removed,
+        "keptsnps": kept,
+        "removedsnps": removed,
         "stats": stats,
-        "p_threshold": p_threshold,
+        "pthreshold": pthreshold,
         "method": method,
     }
 
 
-__all__ = ["hwe_screen_from_genotype"]
+__all__ = ["hwescreenfromgenotype"]
