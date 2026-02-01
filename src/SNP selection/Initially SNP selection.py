@@ -1,10 +1,12 @@
 import os
-import numpy as np
-import pandas as pd
 from utils.IO import readcsv, writecsv, joinpath, tofloat, isnan
 
 def run(statscsv, outdir, pthreshold):
     df = readcsv(statscsv)
+
+    if "praw" not in df.columns:
+        raise ValueError("Input stats file must contain a 'praw' column.")
+
 
     df["praw"] = tofloat(df["praw"])
     df = df[~isnan(df["praw"])]
@@ -12,6 +14,8 @@ def run(statscsv, outdir, pthreshold):
     passed = df[df["praw"] < pthreshold]
     passed = passed.sort_values("praw")
 
+
+    os.makedirs(outdir, exist_ok=True)
     outpath = joinpath(outdir, "passed.snps.praw.lt.csv")
     writecsv(passed, outpath)
 

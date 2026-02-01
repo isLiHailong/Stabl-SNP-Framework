@@ -1,8 +1,7 @@
-import os
 import numpy as np
-import pandas as pd
 from utils.config import DEFAULT_SEED, NUMERIC_STABILITY, STABILITY_SELECTION
-from utils.numeric2 import discretizeback, chi2test, snplist, labels, Xgenoint, Xgeno_z
+from utils.numeric2 import discretizeback, chi2test
+from utils.numeric3 import build_snplist, build_labels, build_Xgenoint, build_Xgeno_z
 
 B = 200
 SUBSAMPLE_FRAC = 0.7
@@ -63,9 +62,9 @@ def choosethetaminfdp(freqreal, freqko, theta_grid=None):
         if sreal == 0:
             continue
         fdpplus = (sko + 1.0) / float(sreal)
-        cand = (fdpplus, -float(t), sreal)
+        cand = (float(fdpplus), -float(t), int(sreal))
         if (best is None) or (cand < best[0]):
-            best = (cand, float(t), float(fdpplus), sreal, sko)
+            best = (cand, float(t), float(fdpplus), int(sreal), int(sko))
     if best is None:
         return None
     return best[1]
@@ -106,49 +105,120 @@ def chi2pvalsgenotypevsgroup(Xint, y):
     return pvals
 
 
-snp_list = snplist
-y = labels
-X_int = Xgenoint
-Xz = Xgeno_z
+def load_inputs(
+    snp_list_file,
+    genotype_file,
+    group_file,
+    sample_prefix="Y1_",
+):
+    snp_list = build_snplist(snp_list_file)
+    X_int, X_imp, sample_cols = build_Xgenoint(genotype_file, snp_list, sample_prefix=sample_prefix)
+    labels = build_labels(group_file, sample_cols)
 
-Xk = gaussianequicorrelatedknockoffs(Xz)
-Xk_int = discretizeback(Xk)
+    use = labels >= 0
+    y = labels[use].astype(int)
 
-rng = np.random.default_rng(int(DEFAULT_SEED))
-n, p = X_int.shape
+    X_int = X_int[use, :]
+    Xz, _scaler = build_Xgeno_z(X_imp[use, :])
 
-selcountsreal = np.zeros(p)
-selcountsko = np.zeros(p)
+    return snp_list, y, X_int, Xz
 
-pgrid = np.logspace(
-    float(STABILITY_SELECTION["pgrid_left"]),
-    float(STABILITY_SELECTION["pgrid_right"]),
-    int(STABILITY_SELECTION["pgrid_size"]),
-)
 
-for b in range(B):
-    idx = rng.choice(n, size=int(n * SUBSAMPLE_FRAC), replace=False)
-    yb = y[idx]
-    Xb = X_int[idx, :]
-    Xkb = Xk_int[idx, :]
+def run_stability_selection(
+    snp_list_file=None,
+    genotype_file=None,
+    group_file=None,
+    sample_prefix="Y1_",
+    x_int=None,
+    x_z=None,
+    y=None,
+    snp_list=None,
+    B_runs=B,
+    subsample_frac=SUBSAMPLE_FRAC,
+    seed=DEFAULT_SEED,
+):
+    if (x_int is None) or (x_z is None) or (y is None) or (snp_list is None):
+        if (snp_list_file is None) or (genotype_file is None) or (group_file is None):
+            raise ValueError(
+                "Provide either (x_int, x_z, y, snp_list) or provide "
+                "(snp_list_file, genotype_file, group_file) to load inputs."
+            )
+        snp_list, y, x_int, x_z = load_inputs(
+            snp_list_file=snp_list_file,
+            genotype_file=genotype_file,
+            group_file=group_file,
+            sample_prefix=sample_prefix,
+        )
 
-    preal = chi2pvalsgenotypevsgroup(Xb, yb)
-    pko = chi2pvalsgenotypevsgroup(Xkb, yb)
+    if x_int.shape[0] != x_z.shape[0]:
+        raise ValueError("x_int and x_z must have the same number of rows.")
+    if x_int.shape[0] != len(y):
+        raise ValueError("x_int and y must have the same number of samples.")
+    if x_int.shape[1] != len(snp_list):
+        raise ValueError("x_int columns must match snp_list length.")
 
-    selectedreal = np.zeros(p, dtype=bool)
-    selectedko = np.zeros(p, dtype=bool)
+    Xk = gaussianequicorrelatedknockoffs(x_z, seed=seed)
+    Xk_int = discretizeback(Xk, seed=int(seed))
 
-    for pcut in pgrid:
-        selectedreal |= (preal <= pcut)
-        selectedko |= (pko <= pcut)
+    rng = np.random.default_rng(int(seed))
+    n, p = x_int.shape
 
-    selcountsreal += selectedreal
-    selcountsko += selectedko
+    selcountsreal = np.zeros(p)
+    selcountsko = np.zeros(p)
 
-freqreal = selcountsreal / float(B)
-freqko = selcountsko / float(B)
+    pgrid = np.logspace(
+        float(STABILITY_SELECTION["pgrid_left"]),
+        float(STABILITY_SELECTION["pgrid_right"]),
+        int(STABILITY_SELECTION["pgrid_size"]),
+    )
 
-theta = choosethetaminfdp(freqreal, freqko)
+    for _ in range(int(B_runs)):
+        idx = rng.choice(n, size=int(n * subsample_frac), replace=False)
+        yb = y[idx]
+        Xb = x_int[idx, :]
+        Xkb = Xk_int[idx, :]
 
-selmask = (freqreal >= theta) if theta is not None else np.zeros_like(freqreal, dtype=bool)
-selected = [snp_list[i] for i in np.where(selmask)[0]]
+        preal = chi2pvalsgenotypevsgroup(Xb, yb)
+        pko = chi2pvalsgenotypevsgroup(Xkb, yb)
+
+        selectedreal = np.zeros(p, dtype=bool)
+        selectedko = np.zeros(p, dtype=bool)
+
+        for pcut in pgrid:
+            selectedreal |= (preal <= pcut)
+            selectedko |= (pko <= pcut)
+
+        selcountsreal += selectedreal
+        selcountsko += selectedko
+
+    freqreal = selcountsreal / float(B_runs)
+    freqko = selcountsko / float(B_runs)
+
+    theta = choosethetaminfdp(freqreal, freqko)
+    selmask = (freqreal >= theta) if theta is not None else np.zeros_like(freqreal, dtype=bool)
+    selected = [snp_list[i] for i in np.where(selmask)[0]]
+
+    return {
+        "selected": selected,
+        "theta": theta,
+        "freqreal": freqreal,
+        "freqko": freqko,
+    }
+
+
+if __name__ == "__main__":
+    SNP_LIST_FILE = ""
+    GENOTYPE_FILE = ""
+    GROUP_FILE = ""
+
+    results = run_stability_selection(
+        snp_list_file=SNP_LIST_FILE,
+        genotype_file=GENOTYPE_FILE,
+        group_file=GROUP_FILE,
+    )
+
+    if results["theta"] is None:
+        print("No threshold found; selection is empty.")
+    else:
+        print(f"Selected {len(results['selected'])} SNPs with theta={results['theta']:.4f}.")
+    print(results["selected"])

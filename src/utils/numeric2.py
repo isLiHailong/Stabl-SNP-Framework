@@ -114,25 +114,4 @@ def chi2test(tab, yates_correction=False):
     return float(stat), pval
 
 
-from utils.numeric3 import (
-    build_snplist,
-    build_labels,
-    build_Xgenoint,
-    build_Xgeno_z,
-)
 
-snplist = build_snplist(SNP87_FILE, EXCLUDE_SNPS)
-
-Xgenoint, X_imp, sample_cols = build_Xgenoint(GENO012_FILE, snplist)
-
-labels = build_labels(PARTITION_FILE, sample_cols)
-
-use = labels >= 0
-y = labels[use].astype(int)
-
-Xgenoint = Xgenoint[use, :]
-
-Xgeno_z, scaler = build_Xgeno_z(X_imp[use, :])
-
-
-__all__ = ["discretizeback", "chi2test","snplist","labels","Xgenoint","Xgeno_z"]

@@ -3,27 +3,24 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 
-def build_snplist(snp_csv, exclude_snps=None):
-    df = pd.read_csv(snp_csv, low_memory=False)
+def build_snplist(snp_list_csv):
+    df = pd.read_csv(snp_list_csv, low_memory=False)
     if "SNPName" not in df.columns:
-        raise ValueError("SNP CSV must contain column 'SNPName'")
-    snps = df["SNPName"].astype(str).tolist()
-    if exclude_snps:
-        snps = [s for s in snps if s not in set(exclude_snps)]
-    return snps
+        raise ValueError("SNP list file must contain column 'SNPName'")
+    return df["SNPName"].astype(str).tolist()
 
 
-def build_labels(partition_csv, sample_ids):
-    part = pd.read_csv(partition_csv, low_memory=False)
+def build_labels(group_csv, sample_ids):
+    part = pd.read_csv(group_csv, low_memory=False)
     need = {"SampleID", "Group"}
     if not need.issubset(part.columns):
-        raise ValueError("Partition file must contain SampleID and Group")
+        raise ValueError("Group file must contain SampleID and Group")
 
     part_map = dict(zip(part["SampleID"].astype(str), part["Group"].astype(str)))
 
     labels = np.full(len(sample_ids), -1, dtype=np.int8)
     for i, sid in enumerate(sample_ids):
-        g = part_map.get(sid, None)
+        g = part_map.get(str(sid), None)
         if g == "A":
             labels[i] = 1
         elif g == "B":
@@ -31,8 +28,8 @@ def build_labels(partition_csv, sample_ids):
     return labels
 
 
-def build_Xgenoint(geno_csv, snplist, sample_prefix="Y1_"):
-    reader = pd.read_csv(geno_csv, low_memory=False, chunksize=8000)
+def build_Xgenoint(genotype_csv, snplist, sample_prefix="Y1_", chunksize=8000):
+    reader = pd.read_csv(genotype_csv, low_memory=False, chunksize=chunksize)
 
     keep = []
     sample_cols = None
@@ -50,13 +47,22 @@ def build_Xgenoint(geno_csv, snplist, sample_prefix="Y1_"):
         if len(sub) > 0:
             keep.append(sub[["SNPName"] + sample_cols])
 
+    if len(keep) == 0:
+        raise ValueError("No SNP rows were found for the given snplist.")
+
     df = pd.concat(keep, axis=0, ignore_index=True)
+    df["SNPName"] = df["SNPName"].astype(str)
+
+    missing = [s for s in snplist if s not in set(df["SNPName"].tolist())]
+    if missing:
+        raise ValueError(f"Missing SNP rows in genotype file (first 10): {missing[:10]}")
+
     df = df.set_index("SNPName").loc[snplist]
 
     G = df[sample_cols].to_numpy()
     G = np.where(pd.isna(G), -1, G).astype(np.int16)
 
-    X = G.T  # (n, p)
+    X = G.T
 
     X_imp = X.astype(float)
     for j in range(X_imp.shape[1]):
@@ -79,4 +85,4 @@ def build_Xgeno_z(X_imp):
     return Xz, scaler
 
 
-__all__ = ["snplist","labels","Xgenoint","Xgeno_z"]
+__all__ = ["build_snplist", "build_labels", "build_Xgenoint", "build_Xgeno_z"]
