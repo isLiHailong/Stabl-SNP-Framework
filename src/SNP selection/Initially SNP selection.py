@@ -10,7 +10,7 @@ def run(statscsv, outdir, pthreshold):
     df = df[~isnan(df["praw"])]
 
     passed = df[df["praw"] < pthreshold]
-    sortvalues
+    passed = passed.sort_values("praw")
 
     outpath = joinpath(outdir, "passed.snps.praw.lt.csv")
     writecsv(passed, outpath)

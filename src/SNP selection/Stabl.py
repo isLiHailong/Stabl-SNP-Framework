@@ -2,72 +2,89 @@ import os
 import numpy as np
 import pandas as pd
 from utils.config import DEFAULT_SEED, NUMERIC_STABILITY, STABILITY_SELECTION
+from utils.numeric2 import discretizeback, chi2test, snplist, labels, Xgenoint, Xgeno_z
 
 B = 200
 SUBSAMPLE_FRAC = 0.7
 
+
 def sqrtpsd(A):
     A = (A + A.T) / 2.0
-    w, V = eigh(A)
-    w = clip(w, 0.0, None)
-    return (V * sqrt(w)) @ V.T
+    w, V = np.linalg.eigh(A)
+    w = np.clip(w, 0.0, None)
+    return (V * np.sqrt(w)) @ V.T
 
-def gaussianequicorrelatedknockoffs(X):
-    rng = default_rng(42)
+
+def gaussianequicorrelatedknockoffs(X, ridge=None, eps=None, jitter=None, seed=None):
+    ridge = float(NUMERIC_STABILITY["ridge"] if ridge is None else ridge)
+    eps = float(NUMERIC_STABILITY["eps"] if eps is None else eps)
+    jitter = float(NUMERIC_STABILITY["jitter"] if jitter is None else jitter)
+    seed = int(DEFAULT_SEED if seed is None else seed)
+
+    rng = np.random.default_rng(seed)
     n, p = X.shape
 
-    Sigma = cov(X)
+    Sigma = np.cov(X, rowvar=False)
     Sigma = (Sigma + Sigma.T) / 2.0
-    Sigma = 0.999 * Sigma + 0.001 * eye(p)
+    Sigma = (1.0 - ridge) * Sigma + ridge * np.eye(p)
 
-    w = eigvalsh(Sigma)
-    lamin = min(w)
-    if lamin <= 1e-10:
-        Sigma = Sigma + (1e-6 - lamin) * eye(p)
+    w = np.linalg.eigvalsh(Sigma)
+    lamin = float(np.min(w))
+    if lamin <= eps:
+        Sigma = Sigma + (jitter - lamin) * np.eye(p)
         Sigma = (Sigma + Sigma.T) / 2.0
-        lamin = min(eigvalsh(Sigma))
+        lamin = float(np.min(np.linalg.eigvalsh(Sigma)))
 
     sval = min(2.0 * lamin, 1.0)
-    s = full(p, sval)
-    S = diag(s)
+    s = np.full(p, sval)
+    S = np.diag(s)
 
-    invSigma = inv(Sigma)
+    invSigma = np.linalg.inv(Sigma)
     C2 = 2.0 * S - S @ invSigma @ S
     C = sqrtpsd(C2)
 
-    A = eye(p) - invSigma @ S
+    A = np.eye(p) - invSigma @ S
     U = rng.standard_normal((n, p))
     return X @ A + U @ C
 
-def choosethetaminfdp(freqreal, freqko):
+
+def choosethetaminfdp(freqreal, freqko, theta_grid=None):
+    if theta_grid is None:
+        theta_grid = np.linspace(
+            float(STABILITY_SELECTION["theta_left"]),
+            float(STABILITY_SELECTION["theta_right"]),
+            int(STABILITY_SELECTION["theta_size"]),
+        )
+
     best = None
-    for t in linspace(0.1, 0.95, 86):
-        sreal = sum(freqreal >= t)
-        sko = sum(freqko >= t)
+    for t in theta_grid:
+        sreal = int(np.sum(freqreal >= t))
+        sko = int(np.sum(freqko >= t))
         if sreal == 0:
             continue
         fdpplus = (sko + 1.0) / float(sreal)
-        cand = (fdpplus, -t, sreal)
+        cand = (fdpplus, -float(t), sreal)
         if (best is None) or (cand < best[0]):
-            best = (cand, t, fdpplus, sreal, sko)
+            best = (cand, float(t), float(fdpplus), sreal, sko)
     if best is None:
         return None
     return best[1]
 
+
 def chi2pvalsgenotypevsgroup(Xint, y):
     n, p = Xint.shape
-    pvals = ones(p)
+    pvals = np.ones(p)
 
-    if len(unique(y)) < 2:
+    if len(np.unique(y)) < 2:
         return pvals
 
     for j in range(p):
         x = Xint[:, j]
-        tab3 = zeros((3, 2), dtype=int)
+        tab3 = np.zeros((3, 2), dtype=int)
         for g in (0, 1, 2):
             m = (x == g)
-            tab3[g, 0] = sum(m & (y == 0))
-            tab3[g, 1] = sum(m & (y == 1))
+            tab3[g, 0] = int(np.sum(m & (y == 0)))
+            tab3[g, 1] = int(np.sum(m & (y == 1)))
 
         if tab3.sum() == 0:
             pvals[j] = 1.0
@@ -82,11 +99,12 @@ def chi2pvalsgenotypevsgroup(Xint, y):
 
         try:
             _, pval = chi2test(tab)
-            pvals[j] = pval
-        except:
+            pvals[j] = float(pval)
+        except Exception:
             pvals[j] = 1.0
 
     return pvals
+
 
 snp_list = snplist
 y = labels
@@ -96,11 +114,17 @@ Xz = Xgeno_z
 Xk = gaussianequicorrelatedknockoffs(Xz)
 Xk_int = discretizeback(Xk)
 
-rng = default_rng(42)
+rng = np.random.default_rng(int(DEFAULT_SEED))
 n, p = X_int.shape
 
-selcountsreal = zeros(p)
-selcountsko = zeros(p)
+selcountsreal = np.zeros(p)
+selcountsko = np.zeros(p)
+
+pgrid = np.logspace(
+    float(STABILITY_SELECTION["pgrid_left"]),
+    float(STABILITY_SELECTION["pgrid_right"]),
+    int(STABILITY_SELECTION["pgrid_size"]),
+)
 
 for b in range(B):
     idx = rng.choice(n, size=int(n * SUBSAMPLE_FRAC), replace=False)
@@ -111,10 +135,10 @@ for b in range(B):
     preal = chi2pvalsgenotypevsgroup(Xb, yb)
     pko = chi2pvalsgenotypevsgroup(Xkb, yb)
 
-    selectedreal = zeros(p, dtype=bool)
-    selectedko = zeros(p, dtype=bool)
+    selectedreal = np.zeros(p, dtype=bool)
+    selectedko = np.zeros(p, dtype=bool)
 
-    for pcut in logspace(-8, -4, 401):
+    for pcut in pgrid:
         selectedreal |= (preal <= pcut)
         selectedko |= (pko <= pcut)
 
@@ -126,5 +150,5 @@ freqko = selcountsko / float(B)
 
 theta = choosethetaminfdp(freqreal, freqko)
 
-selmask = (freqreal >= theta) if theta is not None else zeros_like(freqreal, dtype=bool)
-selected = [snp_list[i] for i in where(selmask)[0]]
+selmask = (freqreal >= theta) if theta is not None else np.zeros_like(freqreal, dtype=bool)
+selected = [snp_list[i] for i in np.where(selmask)[0]]
